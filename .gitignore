@@ -84,3 +84,5 @@ obj_sym.txt
 lib_sym.txt
 examples/python/rps-pluginhost.*.log
 build_x86_64/*
+rps_private/
+.tmp-clap-plugins/
