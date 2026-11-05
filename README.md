@@ -43,11 +43,13 @@ RPS solves this with a **multi-process architecture** where all plugin code runs
 
 | Dependency   | Minimum Version | Notes                                              |
 |--------------|-----------------|----------------------------------------------------|
-| CMake        | 3.25            | Build system (4.2+ required for VS 2026)           |
+| CMake        | 3.22            | Build system (4.2+ for the Visual Studio 2026 generator) |
 | C++ Compiler | C++23 capable   | Requires a C++23-capable standard library too; Windows uses MSVC or clang-cl |
 | Ninja        | 1.11+           | Build backend (Recommended)                        |
 | vcpkg        | Latest          | C/C++ package manager (Used on ALL platforms)      |
 | Git          | 2.x             | For version management                             |
+
+The CMake version range `3.22...3.25` accepts CMake 3.22 and enables policy behavior through 3.25 when available. macOS requires CMake 3.22.4 or newer for AppleClang C++23 support. A C++23-capable compiler and standard library are still required.
 
 Third-party dependencies (`boost`, `grpc`, `protobuf`, `spdlog`, `sqlite3`, `sdl3`, and `imgui`) are managed by `vcpkg` during configuration. Linux additionally needs the system development packages listed below.
 

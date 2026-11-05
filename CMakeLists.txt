@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.22...3.25)
 
 project(rps-plugin-scanner
     VERSION 0.2.1
@@ -29,6 +29,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(APPLE)
+    # AppleClang gained C++23 flag support in CMake 3.22.4.
+    # https://www.kitware.com/cmake-3-22-4-available-for-download/
+    if(CMAKE_VERSION VERSION_LESS 3.22.4)
+        message(FATAL_ERROR "macOS builds require CMake 3.22.4 or newer for AppleClang C++23 support.")
+    endif()
     enable_language(OBJCXX)
     set(CMAKE_OBJCXX_STANDARD 23)
     set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
@@ -118,8 +123,8 @@ if(WIN32 AND NOT MSVC AND NOT CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
 endif()
 
 # Boost: managed entirely by vcpkg
-# Config mode is supported by CMake 3.25 and avoids the FindBoost/CMP0167 policy.
-# https://cmake.org/cmake/help/v3.25/command/find_package.html#config-mode
+# Config mode is supported by CMake 3.22 and avoids the FindBoost/CMP0167 policy.
+# https://cmake.org/cmake/help/v3.22/command/find_package.html#config-mode
 find_package(Boost CONFIG REQUIRED COMPONENTS json program_options filesystem process interprocess uuid dll date_time crc)
 
 # Find SQLite3
@@ -134,7 +139,7 @@ if(SQLITE3_STATIC_LIBRARY)
     )
 else()
     find_package(SQLite3 REQUIRED)
-    # CMake 4.3 renamed the imported target; retain compatibility with 3.25.
+    # CMake 4.3 renamed the imported target; retain compatibility with 3.22.
     # https://cmake.org/cmake/help/v4.3/module/FindSQLite3.html#imported-targets
     if(NOT TARGET SQLite3::SQLite3)
         add_library(SQLite3::SQLite3 ALIAS SQLite::SQLite3)

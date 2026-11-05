@@ -4,7 +4,7 @@
 # This file is chainloaded by vcpkg instead of its default windows.cmake,
 # so it must replicate the CRT flag handling that windows.cmake normally does.
 
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 3.22...3.25)
 
 if(_CLANG_CL_TOOLCHAIN_LOADED)
     return()

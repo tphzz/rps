@@ -625,7 +625,7 @@ Graph mode will support opening/closing individual plugin GUIs within a running 
 | Component | Technology | Version |
 |-----------|-----------|---------|
 | Language | C++ | 23 |
-| Build system | CMake | 3.25+ |
+| Build system | CMake | 3.22+ (3.22.4+ on macOS) |
 | Package manager | vcpkg | Manifest mode |
 | IPC (scanner) | Boost.Interprocess | 1.90 |
 | IPC (host) | stdin/stdout pipes | — |
@@ -642,7 +642,7 @@ Graph mode will support opening/closing individual plugin GUIs within a running 
 
 ### Build and validation
 
-- CMake 3.25+ discovers Boost through its config package. Objective-C++ is enabled only on macOS; both C++ and Objective-C++ require C++23 without compiler extensions.
+- CMake 3.22+ discovers Boost through its config package; the declared `3.22...3.25` range enables policy behavior through 3.25 when available. macOS requires CMake 3.22.4+ for AppleClang C++23 flag support. Objective-C++ is enabled only on macOS; both C++ and Objective-C++ require C++23 without compiler extensions.
 - Windows x64 builds use MSVC with `x64-windows-static`, or clang-cl with the x64-only `x64-windows-static-clang` overlay. Windows ARM64 uses `arm64-windows-static` with a matching developer environment. Compiler-driver syntax and target ABI are checked separately.
 - macOS ARM64/Intel use `arm64-osx-release`/`x64-osx-release`; Linux x64/ARM64 use `x64-linux`/`arm64-linux`. Linux requires native X11 development libraries for plugin embedding, plus the SDL3 Wayland, IBus, and ALSA prerequisites described in the README.
 - The coordinator suite is built by default and registered with CTest. `RPS_BUILD_COORDINATOR_TESTS=OFF` omits its executable and registration; no external test framework is required.
