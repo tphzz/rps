@@ -524,3 +524,24 @@ rps-standalone --formats vst3
 ## License
 
 MIT License
+
+## Binary distributions
+
+Portable packages are available for Windows x64/ARM64, Linux x64/ARM64, and macOS
+Intel/ARM64. Keep the six programs together, including `rps-pluginscanner` and the
+unified `rps-pluginhost`; the applications discover their worker companions beside
+themselves. Apple Silicon packages also include `rps-pluginscanner_x86_64` and
+`rps-pluginhost_x86_64` for Intel plugins through Rosetta.
+
+Windows installers support per-user installation with an optional user PATH task.
+The combined installer selects the native architecture; architecture-specific
+installers contain their named payload. Debug installations use a separate directory.
+macOS packages are signed ZIPs, with notarization recorded when requested. Linux
+packages are tar.gz archives containing required non-system C++ runtimes; native
+system audio/window libraries remain operating-system prerequisites.
+
+Each archive includes licenses and `build-info.json`, recording the public source
+ref/commit, package version, configuration, VST2 inclusion, notarization state, and
+payload hashes. Package versions may follow a selected version tag or branch rather
+than the source's CMake project version. Published release assets include checksums
+and a release manifest. Proprietary SDK source and headers are excluded.

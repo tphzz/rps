@@ -669,3 +669,17 @@ Graph mode will support opening/closing individual plugin GUIs within a running 
 - **POSIX shared memory** and semaphores for audio transport.
 - LV2 and LADSPA format support via native APIs.
 - `_exit(0)` for fast scanner process termination.
+
+### Distribution boundary
+
+A binary distribution keeps the server, standalone scanner frontend, isolated
+scanner, unified plugin host, VST scanner replacement, and C++ example client together.
+Worker executables remain independent processes and are located beside their callers.
+Apple Silicon distributions add separate Intel scanner/host executables for Rosetta.
+
+Packages contain executable payloads, required non-system runtimes, license notices,
+and a build manifest. They exclude proprietary SDK sources and headers. macOS
+hardened-runtime signatures grant the library-validation exception specifically to
+plugin-loading workers, preserving the process boundary around third-party code.
+Windows installers select the native payload and install per-user; packaging does
+not change IPC protocols, graph execution, or real-time audio behavior.

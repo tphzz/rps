@@ -457,3 +457,23 @@ The audio engine is currently at Phase 6 (CPU Topology Awareness) of the graph-b
 Other goals:
 - **OS-Specific Scanners**: AU (macOS), LV2 (Linux/Windows) scanner implementations.
 - **Authentication**: Optional TLS/token auth for remote gRPC connections.
+
+## Distribution validation
+
+Binary packaging stages all six application executables, including the unified
+plugin host, with their required worker companions and applicable license notices.
+Validation checks executable architecture, runtime dependencies, the Windows host's
+8 MiB stack reservation, coordinator CTest results, and executable help commands.
+Debug configurations use Debug-capable dependency triplets.
+
+Archive manifests identify the exact public source commit and selected build flags.
+Package versions use semantic version tags or version branches when available;
+other branch previews use the CMake project version with branch/commit identity.
+This package naming policy does not modify application APIs or source version fields.
+macOS worker signatures include the library-validation exception needed to load
+third-party plugins. Intel fallback workers retain their architecture and signatures.
+
+Installing Windows packages is per-user. Installer validation uses a temporary
+installation, checks native payload selection, tests the optional PATH entry, and
+uninstalls while preserving pre-existing user PATH values. Package smoke checks do
+not replace real plugin GUI, audio-device, or notarization qualification.
