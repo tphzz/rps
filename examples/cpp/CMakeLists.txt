@@ -58,7 +58,7 @@ add_custom_command(
 )
 
 # Suppress warnings on generated code
-if(MSVC)
+if(RPS_MSVC_FRONTEND)
     set_source_files_properties(${PROTO_SRCS} ${GRPC_SRCS} PROPERTIES
         COMPILE_FLAGS "/W0"
     )
@@ -102,8 +102,8 @@ add_custom_command(TARGET rps-example-client POST_BUILD
         "$<TARGET_FILE_DIR:rps-example-client>/$<TARGET_FILE_NAME:rps-pluginscanner>"
     # Optional Rosetta fallback scanner
     COMMAND ${CMAKE_COMMAND} 
-        -DSRC="$<TARGET_FILE_DIR:rps-pluginscanner>/rps-pluginscanner_x86_64" 
-        -DDST="$<TARGET_FILE_DIR:rps-example-client>/rps-pluginscanner_x86_64" 
+        "-DSRC=$<TARGET_FILE_DIR:rps-pluginscanner>/rps-pluginscanner_x86_64"
+        "-DDST=$<TARGET_FILE_DIR:rps-example-client>/rps-pluginscanner_x86_64"
         -P "${CMAKE_SOURCE_DIR}/cmake/try_copy.cmake"
     COMMENT "Ensuring server binaries are present for C++ example"
 )

@@ -296,7 +296,6 @@ int main(int argc, char* argv[]) {
     } catch (const std::exception& e) {
         spdlog::error("Scanner fatal error: {}", e.what());
         // Ensure error is written to rosetta-file if requested
-        std::string rosettaFile = vm.count("rosetta-file") ? vm["rosetta-file"].as<std::string>() : "";
         if (!rosettaFile.empty()) {
             rps::scanner::ScannerEvent evtMsg;
             auto* err = evtMsg.mutable_error();

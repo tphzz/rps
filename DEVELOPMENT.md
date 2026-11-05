@@ -40,7 +40,7 @@ The system has two major domains:
 
 6. **`rps-pluginhost`** (The Plugin Host Worker)
    - An isolated process that loads and hosts plugins. Operates in two modes:
-   - **Single-plugin GUI mode** (`rps-pluginhost-vst3`, `rps-pluginhost-clap`): Loads a plugin, creates an SDL3 window, embeds the plugin's native editor with an ImGui preset sidebar. Communicates via Protobuf over stdin/stdout pipes.
+   - **Single-plugin GUI mode** (`rps-pluginhost --format vst3|clap`): Loads a plugin, creates an SDL3 window, embeds the plugin's native editor with an ImGui preset sidebar. Communicates via Protobuf over stdin/stdout pipes.
    - **Graph mode**: Hosts multiple plugins in an arbitrary DAG-based audio processing graph with wavefront-parallel execution. Communicates via shared memory (`SharedAudioRing`).
 
 7. **`rps-coordinator`** (Graph Audio Engine Core)
@@ -74,24 +74,28 @@ We adhere to a set of strict constraints to ensure maximum compatibility, adopti
 
 ### 2.1 Dependency Management
 
-To guarantee binary portability (creating self-contained executables without DLL/shared object dependencies), RPS relies on **`vcpkg`** across all platforms for resolving its dependencies (`boost`, `grpc`, `protobuf`, `spdlog`, and `sqlite3`) as **static libraries**.
+RPS resolves Boost, gRPC, Protobuf, spdlog, SQLite, SDL3, and ImGui through **vcpkg** using static-library triplets. Operating-system libraries and frameworks remain external requirements; Linux GUI/audio prerequisites are listed in the README.
 
-- **Windows**: Built with MSVC (`cl.exe`) or Clang via the Ninja generator, using the `x64-windows-static` vcpkg triplet and `-DRPS_MSVC_STATIC_RUNTIME=ON`.
-- **macOS**: Built with Apple Clang using the `arm64-osx-static` vcpkg triplet.
-- **Linux**: Built with GCC using the `x64-linux` vcpkg triplet (which defaults to static linking).
+- **Windows x64**: MSVC (`cl.exe`) uses `x64-windows-static`; clang-cl uses the `x64-windows-static-clang` overlay triplet. Both use Ninja and static CRT linkage. The custom Clang triplet is x64-only.
+- **Windows ARM64**: `arm64-windows-static` requires an ARM64 Visual Studio developer environment.
+- **macOS**: Apple Clang uses `arm64-osx-release` or `x64-osx-release`. Only Apple builds enable Objective-C++, with C++23 required for both languages.
+- **Linux**: GCC or Clang uses `x64-linux` or `arm64-linux` (static libraries).
 
 Because all dependencies are managed via `vcpkg.json` (Manifest Mode), the CMake configure step will automatically download and build the exact requested versions of Boost (1.90.0) and other libraries before compiling RPS.
+
+Boost is found in CMake config mode, avoiding an unconditional dependency on the CMake 3.30 `CMP0167` policy while retaining the project's CMake 3.25 minimum. MSVC-style warning and linker options are selected by compiler frontend rather than assuming that every compiler targeting Windows accepts the same command-line syntax.
+
+SQLite consumers use `SQLite3::SQLite3`; configuration supplies an alias on CMake versions older than 4.3. This keeps the 3.25 minimum while avoiding the deprecated target name on newer CMake releases.
+
+The existing `RPS_BUILD_COORDINATOR_TESTS` option defaults to `ON`. The coordinator suite is registered as `rps-coordinator-tests` with CTest and has a 120-second timeout. Use `ctest --test-dir <build-dir> -C Release --output-on-failure --no-tests=error`; disable the option to omit both the executable and registration. Export compile commands when configuring Ninja builds for clang-tidy checks.
 
 ### 2.2 Optional: VST2.4 SDK
 
 VST2 scanning is gated behind a **compile-time CMake option** (`RPS_ENABLE_VST2`, default OFF) because the VST2.4 SDK is proprietary and cannot be redistributed.
 
-When enabled, the build expects the SDK at `libs/rps-core/include/rps/core/vstsdk2.4/` (or a custom path via `-DRPS_VST2_SDK_PATH`). The key header is `pluginterfaces/vst2.x/aeffect.h`.
+Keep the proprietary SDK outside the source checkout and pass its location through `RPS_VST2_SDK_PATH`. The key header is `pluginterfaces/vst2.x/aeffect.h`. The legacy default search location is retained for compatibility, but the SDK must not be distributed with the project.
 
 ```bash
-# Enable VST2 with default SDK location:
-cmake -G Ninja -DRPS_ENABLE_VST2=ON -B build
-
 # Enable VST2 with custom SDK path:
 cmake -G Ninja -DRPS_ENABLE_VST2=ON -DRPS_VST2_SDK_PATH=/path/to/vstsdk2.4 -B build
 ```
@@ -143,14 +147,12 @@ We have successfully completed **Phase 1 (IPC Foundation)**, **Phase 2 (Process 
 - `apps/rps-server/`: **gRPC server** exposing the scan engine and GUI hosting to any language.
   - `src/RpsServiceImpl.cpp`: Implements the `RpsService` gRPC service (StartScan, StopScan, GetStatus, Shutdown, OpenPluginGui, ClosePluginGui, ListPlugins, GetPluginState, SetPluginState, LoadPreset).
   - `src/GrpcScanObserver.cpp`: Implements `ScanObserver`, serializes events into protobuf `ScanEvent` messages and writes them to a `grpc::ServerWriter`.
-   - `src/GuiSessionManager.cpp`: Manages active plugin GUI sessions. Spawns the appropriate host worker process (`rps-pluginhost-vst3` or `rps-pluginhost-clap`) with stdin/stdout pipes, establishes IPC via `StdioPipeConnection`, creates shared memory audio ring buffers when audio is requested, and relays events (including `AudioReady`) between the gRPC stream and the host worker.
+  - `src/GuiSessionManager.cpp`: Manages active plugin GUI sessions. Spawns `rps-pluginhost` with the selected format and stdin/stdout pipes, establishes IPC via `StdioPipeConnection`, creates shared memory audio ring buffers when audio is requested, and relays events (including `AudioReady`) between the gRPC stream and the host worker.
   - Uses `spdlog` for dual-sink logging (stdout + file).
 
-- `apps/rps-pluginhost-vst3/`: **VST3 GUI host worker** process.
-  - `src/Vst3GuiHost.cpp`: Implements `IPluginGuiHost` for VST3 plugins. Handles COM module loading, `IComponent`/`IEditController` setup, `IPlugView` embedding in the SDL3 window, parameter discovery, preset discovery (via `IUnitInfo` and `.vstpreset` file scanning), preset loading, and **audio processing** (multi-bus negotiation with sidechain support via `activateBus`/`setBusArrangements`, de-interleaving/re-interleaving, `IAudioProcessor` calls with proper `ProcessContext` transport state, `ParameterChanges`, and `ConnectionProxy` message forwarding between component and controller for FabFilter-style real-time metering).
-
-- `apps/rps-pluginhost-clap/`: **CLAP GUI host worker** process.
-  - `src/ClapGuiHost.cpp`: Implements `IPluginGuiHost` for CLAP plugins. Handles CLAP plugin loading, GUI embedding, parameter discovery, preset discovery/loading via the CLAP preset-load extension, host extension stubs (`clap.params`, `clap.latency`, `clap.state`) to prevent crashes in plugins that cache extension pointers, and **audio processing** (multi-port audio with sidechain support, activation, processing via `clap_plugin.process()`).
+- `apps/rps-pluginhost/`: **Unified VST3/CLAP host worker** process.
+  - `src/vst3/Vst3GuiHost.cpp`: Implements `IPluginGuiHost` for VST3 plugins. Handles COM module loading, `IComponent`/`IEditController` setup, `IPlugView` embedding in the SDL3 window, parameter discovery, preset discovery (via `IUnitInfo` and `.vstpreset` file scanning), preset loading, and **audio processing** (multi-bus negotiation with sidechain support via `activateBus`/`setBusArrangements`, de-interleaving/re-interleaving, `IAudioProcessor` calls with proper `ProcessContext` transport state, `ParameterChanges`, and `ConnectionProxy` message forwarding between component and controller for FabFilter-style real-time metering).
+  - `src/clap/ClapGuiHost.cpp`: Implements `IPluginGuiHost` for CLAP plugins. Handles CLAP plugin loading, GUI embedding, parameter discovery, preset discovery/loading via the CLAP preset-load extension, host extension stubs (`clap.params`, `clap.latency`, `clap.state`) to prevent crashes in plugins that cache extension pointers, and **audio processing** (multi-port audio with sidechain support, activation, processing via `clap_plugin.process()`).
 
 #### Proto
 - `proto/rps.proto`: gRPC service and message definitions. `ScanEvent` is a `oneof` union mirroring all `ScanObserver` callbacks 1:1. `PluginEvent` is a `oneof` union for GUI hosting events (gui_opened, gui_closed, parameter_list, parameter_updates, preset_list, preset_loaded, audio_ready, gui_error). `OpenPluginGuiRequest` includes optional audio parameters (`enable_audio`, `sample_rate`, `block_size`, `num_channels`). `StreamAudio` is a bidirectional streaming RPC that proxies `AudioInputBlock`/`AudioOutputBlock` messages through the server’s shared memory ring for network-transparent audio processing.
@@ -172,7 +174,7 @@ Used between the scan engine (`ProcessPool`) and `rps-pluginscanner`:
   - `ScanErrorEvent`: On caught, non-fatal errors. Errors prefixed with `SKIP:` are treated as non-scannable plugins (stored in `plugins_skipped`).
 
 #### Pluginhost IPC (`proto/host.proto`)
-Used between `rps-server` and the GUI host workers (`rps-pluginhost-vst3`, `rps-pluginhost-clap`):
+Used between `rps-server` and the unified GUI host worker (`rps-pluginhost`):
 - `HostCommand`: Commands from server → host (open GUI, close GUI, get params, load preset, save/restore state, etc.).
 - `HostEvent`: Events from host → server (GUI opened/closed, parameter updates, preset lists, audio ready, errors).
 
@@ -190,7 +192,7 @@ The scanner path (`ProcessPool` ↔ `rps-pluginscanner`) uses **Boost.Interproce
 - **Rationale**: Message queues are well-suited for the scanner's crash-prone workflow. Stdout/stderr from the scanner process are captured separately for crash diagnostics, and the MQ transport keeps the IPC channel independent of the process's standard I/O streams.
 
 #### Pluginhost Path: stdin/stdout Pipes
-The pluginhost path (`GuiSessionManager` ↔ `rps-pluginhost-*`) uses **length-prefixed Protobuf over stdin/stdout pipes** (`StdioPipeConnection`):
+The pluginhost path (`GuiSessionManager` ↔ `rps-pluginhost`) uses **length-prefixed Protobuf over stdin/stdout pipes** (`StdioPipeConnection`):
 - Wire format: `[4-byte uint32_t length, little-endian][N-byte serialized protobuf payload]`.
 - The server spawns the host process with `boost::process` pipe redirection (`bp::std_in < cmdPipe`, `bp::std_out > evtPipe`).
 - **Plugin stdout protection**: At startup, before any plugin code runs, the host process saves the original stdout fd, then redirects stdout → stderr via `_dup2(2, 1)` (Windows) / `dup2(STDERR_FILENO, STDOUT_FILENO)` (POSIX). The saved original stdout fd is used for the IPC pipe. Any plugin stdout output goes harmlessly to stderr/logs.
@@ -324,7 +326,9 @@ SELECT p.* FROM plugins p
 ```
 
 ### 3.11 Build Robustness & Static Linking
-To ensure the scanner binaries are portable and do not fail with "missing DLL" errors (exit code 127 on Windows), we strictly **statically link** the C/C++ runtimes (`-static-libgcc -static-libstdc++`), Boost, and SQLite. On Windows, we use the MSYS2 Clang64 environment for the most compliant C++23 build.
+Windows builds use MSVC or clang-cl with the MSVC ABI, static vcpkg libraries, and the static MSVC CRT. A GNU/MinGW-targeting Clang cannot use Windows MSVC-ABI triplets; configuration rejects that combination for x64 and ARM64. Native operating-system libraries remain required on all platforms.
+
+`rps-server-worker-deps` refreshes the scanner and unified plugin host beside the server on every server build, independently of whether the server relinks. These are required copies and errors fail the build. Example-directory copies use `try_copy.cmake` and warn if a running process locks the destination. Optional Rosetta worker copies remain best-effort when present.
 
 ### 3.12 Logging System
 

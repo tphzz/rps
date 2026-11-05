@@ -51,4 +51,7 @@ if(RPS_BUILD_COORDINATOR_TESTS)
             spdlog::spdlog
     )
     target_include_directories(rps-coordinator-tests PRIVATE include)
+    # https://cmake.org/cmake/help/v3.25/command/add_test.html
+    add_test(NAME rps-coordinator-tests COMMAND rps-coordinator-tests)
+    set_tests_properties(rps-coordinator-tests PROPERTIES TIMEOUT 120)
 endif()

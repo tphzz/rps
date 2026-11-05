@@ -44,17 +44,17 @@ RPS solves this with a **multi-process architecture** where all plugin code runs
 | Dependency   | Minimum Version | Notes                                              |
 |--------------|-----------------|----------------------------------------------------|
 | CMake        | 3.25            | Build system (4.2+ required for VS 2026)           |
-| C++ Compiler | C++23 capable   | Clang 16+ (macOS+Linux), MSVC 2022 17.5+ (Windows) |
+| C++ Compiler | C++23 capable   | Requires a C++23-capable standard library too; Windows uses MSVC or clang-cl |
 | Ninja        | 1.11+           | Build backend (Recommended)                        |
 | vcpkg        | Latest          | C/C++ package manager (Used on ALL platforms)      |
 | Git          | 2.x             | For version management                             |
 
-All dependencies (`boost`, `grpc`, `protobuf`, `spdlog`, `sqlite3`) are managed automatically by `vcpkg` during the CMake configure step.
+Third-party dependencies (`boost`, `grpc`, `protobuf`, `spdlog`, `sqlite3`, `sdl3`, and `imgui`) are managed by `vcpkg` during configuration. Linux additionally needs the system development packages listed below.
 
 ### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/bzeiss/rps.git
+git clone https://github.com/tphzz/rps.git
 cd rps
 git submodule update --init --recursive
 ```
@@ -63,10 +63,10 @@ The submodule init will download the plugin SDK headers (CLAP, VST3).
 
 ### Step 2: Configure and Build
 
-RPS uses `vcpkg` across **all platforms** (Windows, macOS, and Linux) to ensure that the resulting executables are completely self-contained and statically linked. This prevents runtime crashes due to missing `.dll`, `.so`, or `.dylib` files.
+RPS uses static `vcpkg` libraries across Windows, macOS, and Linux. Windows builds also use the static MSVC runtime. Operating-system DLLs, macOS frameworks, and Linux system libraries remain runtime requirements; static third-party linking does not produce an executable independent of its operating system.
 
 1. **Install vcpkg** if you haven't already:
-   Because we use `vcpkg` in manifest mode with specific dependency version overrides, vcpkg requires its repository to be checked out at the exact `builtin-baseline` specified in `vcpkg.json`.
+   The manifest pins its registry baseline and dependency versions. Use a full vcpkg checkout containing that baseline. Checking out the same baseline is a reproducible local setup; a newer checkout containing it also supports manifest version resolution.
    ```bash
    git clone https://github.com/microsoft/vcpkg.git /path/to/vcpkg
    cd /path/to/vcpkg
@@ -85,43 +85,47 @@ RPS uses `vcpkg` across **all platforms** (Windows, macOS, and Linux) to ensure 
    winget install Ninja-build.Ninja
    ```
 
-#### Windows (MSVC/VSVC ABI)
+#### Windows x64 (MSVC)
 
-Must be run in the Developer Powershell for VS 18. Tested only with Visual Studio 2026.
+Run in an x64 Developer PowerShell for Visual Studio. The local validation toolchain is Visual Studio 2026 with CMake 4.3.3; the Visual Studio 2026 generator itself requires CMake 4.2 or later. The commands below use Ninja.
 
 ```cmd
 # Configure CMake to use vcpkg and static linking
-# * Enable VST2 with custom SDK path if needed: -DRPS_ENABLE_VST2=ON -DRPS_VST2_SDK_PATH=/path/to/vstsdk2.4
 # * if using the MSBuild generator (e.g. -G "Visual Studio 18 2026"), CMake 4.2+ is required
 # * adapt the paths
 
-cmake -G Ninja -B build-vc -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static -DRPS_MSVC_STATIC_RUNTIME=ON -DRPS_ENABLE_VST2=ON -DRPS_VST2_SDK_PATH=c:/dev/vstsdk2.4
+cmake -S . -B build-vc -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=cl -DCMAKE_CXX_COMPILER=cl -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static -DRPS_MSVC_STATIC_RUNTIME=ON -DRPS_ENABLE_VST2=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
       
 # Build the project
 cmake --build build-vc --config Release
 ```
 
-#### Windows (Clang/MSVC ABI)
+#### Windows x64 (clang-cl / MSVC ABI)
 
 This uses a custom triplet to force the Clang MSVC ABI for compilation with LLVM tools (from the llvm.org website). The triplet is based on the x64-windows-static triplet but with the Clang MSVC ABI. MSVC is still required to be installed for some dependencies. Windows SDK must be discoverable through the LIB environment variable.
 
-Must be run in the Developer Powershell for VS 18. Tested only with Visual Studio 2026 and LLVM 22.1.0 from llvm.org.
+Run in an x64 Developer PowerShell for Visual Studio. The local validation toolchain uses LLVM 22.1.0 and Visual Studio 2026. The custom triplet is x64-only; it must not be reused for ARM64 builds.
 
 ```cmd
-# * Enable VST2 with custom SDK path if needed: -DRPS_ENABLE_VST2=ON -DRPS_VST2_SDK_PATH=/path/to/vstsdk2.4
 # * adapt the paths
 
-cmake -G Ninja -B build-clang -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static-clang -DVCPKG_OVERLAY_TRIPLETS=triplets -DRPS_ENABLE_VST2=ON -DRPS_VST2_SDK_PATH=c:/dev/vstsdk2.4
+cmake -S . -B build-clang -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang-cl -DCMAKE_CXX_COMPILER=clang-cl -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-windows-static-clang -DVCPKG_OVERLAY_TRIPLETS=triplets -DRPS_ENABLE_VST2=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
 cmake --build build-clang --config Release
 ```
 
-#### macOS (Apple Silicon)
+#### macOS (Apple Silicon and Intel)
+
+Use the triplet and architecture matching the intended binary. Objective-C++ is enabled only on macOS, with the same C++23 requirement as C++ sources.
 
 ```bash
 # Enable VST2 with custom SDK path if needed: -DRPS_ENABLE_VST2=ON -DRPS_VST2_SDK_PATH=/path/to/vstsdk2.4
-cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=arm64-osx-release
+cmake -G Ninja -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=arm64-osx-release
 cmake --build build --config Release
+
+# Intel build, in a separate directory:
+cmake -G Ninja -B build_x86_64 -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_TOOLCHAIN_FILE=/path/to/vcpkg/scripts/buildsystems/vcpkg.cmake -DVCPKG_TARGET_TRIPLET=x64-osx-release
+cmake --build build_x86_64 --config Release
 ```
 
 #### Linux (Ubuntu/Debian/Fedora)
@@ -132,11 +136,14 @@ cmake --build build --config Release
 ```bash
 # Ubuntu/Debian:
 sudo apt install build-essential cmake ninja-build pkg-config curl zip unzip tar autoconf autoconf-archive automake libtool
+# SDL3 default X11/Wayland/IBus features, ALSA audio, and native plugin embedding:
+sudo apt install libx11-dev libxft-dev libxext-dev libwayland-dev wayland-protocols libxkbcommon-dev libegl1-mesa-dev libibus-1.0-dev libasound2-dev
 # For Clang:
 sudo apt install clang
 
 # Fedora:
 sudo dnf install gcc-c++ cmake ninja-build pkgconf-pkg-config curl zip unzip tar autoconf autoconf-archive automake libtool
+sudo dnf install libX11-devel libXft-devel libXext-devel wayland-devel wayland-protocols-devel libxkbcommon-devel mesa-libEGL-devel ibus-devel alsa-lib-devel
 # For Clang:
 sudo dnf install clang
 ```
@@ -166,6 +173,28 @@ cmake --build build-clang --config Release
 | **Linux**   | x64           | GCC / Clang         | `x64-linux`                        |                                                             |
 | **Linux**   | arm64         | GCC / Clang         | `arm64-linux`                      |                                                             |
 
+The custom Windows Clang triplet also requires `-DVCPKG_OVERLAY_TRIPLETS=triplets`. For Windows ARM64, use a matching ARM64 Visual Studio developer environment. Linux ARM64 uses `arm64-linux` in a separate build directory. These target settings describe configuration; they do not imply that every platform has been validated with the same compiler versions.
+
+### Tests and optional VST2 scanning
+
+Coordinator tests are built by default and registered with CTest:
+
+```bash
+ctest --test-dir build-vc -C Release --output-on-failure --no-tests=error
+ctest --test-dir build-clang -C Release --output-on-failure --no-tests=error
+```
+
+Use your selected build directory on other platforms. Set `-DRPS_BUILD_COORDINATOR_TESTS=OFF` to omit the test executable and its registration. `CMAKE_EXPORT_COMPILE_COMMANDS=ON` provides a compilation database for checks such as `clang-tidy -p build-clang "--checks=clang-analyzer-*" apps/rps-server/src/main.cpp`. Select actual checks explicitly if your local clang-tidy configuration enables only compiler diagnostics.
+
+VST2 is disabled by default. To enable it locally, keep the proprietary SDK outside the source checkout and point an existing build at it:
+
+```bash
+cmake -S . -B build-vc -DRPS_ENABLE_VST2=ON "-DRPS_VST2_SDK_PATH=C:/SDKs/vstsdk2.4"
+cmake --build build-vc --config Release --target rps-pluginscanner
+```
+
+Use the corresponding external SDK path on macOS/Linux. The SDK is never part of the public source distribution.
+
 ---
 
 ### Build Output
@@ -174,21 +203,20 @@ After a successful build, you will find the following binaries in the `build/` d
 - `build/apps/rps-standalone/rps-standalone` (or `.exe`) — standalone CLI
 - `build/apps/rps-pluginscanner/rps-pluginscanner` (or `.exe`) — scanner worker
 - `build/apps/rps-server/rps-server` (or `.exe`) — gRPC server
-- `build/apps/rps-pluginhost-vst3/rps-pluginhost-vst3` (or `.exe`) — VST3 GUI host worker
-- `build/apps/rps-pluginhost-clap/rps-pluginhost-clap` (or `.exe`) — CLAP GUI host worker
+- `build/apps/rps-pluginhost/rps-pluginhost` (or `.exe`) — unified VST3/CLAP GUI and graph host worker
 - `build/apps/rps-vstscannermaster/vstscannermaster` (or `.exe`) — Steinberg-compatible VST3 cache generator
 - `build/examples/cpp/rps-example-client` (or `.exe`) — C++ gRPC example client
 
 Visual Studio adds an additional layer of subdirectories "Release" or "Debug".
 
-The dependant processes `rps-pluginscanner`, `rps-pluginhost-vst3`, and `rps-pluginhost-clap` will be copied automatically to the example directories.
+Replace `build` with the directory selected above. Every server build refreshes the required `rps-pluginscanner` and `rps-pluginhost` copies beside the server, including incremental builds where the server does not relink. Copies to the Python/Java example directories are convenience copies; locked destination files produce warnings. Required copies beside the server fail the build if they cannot be updated.
 
 ## Usage
 
 RPS can be used in five ways:
 1. **Standalone CLI** (`rps-standalone`) — run scans directly from the command line.
 2. **gRPC Server** (`rps-server`) — a long-lived daemon that accepts scan requests and plugin GUI hosting from any language client. See [gRPC Server](#grpc-server) and [Python TUI Client](#python-tui-client) below.
-3. **Plugin GUI Hosting** (`rps-pluginhost-vst3`, `rps-pluginhost-clap`) — isolated worker processes that open a plugin's native GUI in an SDL3 window with an ImGui preset browser sidebar. Driven via gRPC through `rps-server`.
+3. **Plugin GUI Hosting** (`rps-pluginhost`) — an isolated worker process that selects VST3 or CLAP and opens the plugin's native GUI in an SDL3 window with an ImGui preset browser sidebar. Driven via gRPC through `rps-server`.
 4. **Audio Processing** — send audio through hosted plugins via shared memory ring buffers. Use `open-gui --audio` in the Python client to enable audio, then `send-audio <file.wav>` to process a WAV file. For real-time playback through an audio device, use `open-gui --audio --audio-device sdl3`, then `play-audio <file.wav>` or `play-audio-looped <file.wav>` (shared memory path). For network-transparent gRPC playback, use `play-audio-grpc <file.wav>` or `play-audio-looped-grpc <file.wav>`.
 5. **VST3 Scanner Master** (`vstscannermaster`) — drop-in replacement for Steinberg's `vstscannermaster.exe` that produces Cubase/Nuendo/Dorico-compatible XML cache files. See [VST3 Scanner Master](#vst3-scanner-master) below.
 

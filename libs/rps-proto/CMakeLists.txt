@@ -68,7 +68,7 @@ add_custom_command(
 )
 
 # Suppress warnings on generated code
-if(MSVC)
+if(RPS_MSVC_FRONTEND)
     set_source_files_properties(${RPS_PROTO_SRCS} ${HOST_PROTO_SRCS} ${SCANNER_PROTO_SRCS} PROPERTIES COMPILE_FLAGS "/W0")
 else()
     set_source_files_properties(${RPS_PROTO_SRCS} ${HOST_PROTO_SRCS} ${SCANNER_PROTO_SRCS} PROPERTIES COMPILE_FLAGS "-Wno-error -w")

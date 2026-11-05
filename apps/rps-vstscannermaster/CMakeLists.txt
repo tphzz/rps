@@ -17,8 +17,8 @@ add_custom_target(vstscannermaster-deps ALL
         "$<TARGET_FILE_DIR:vstscannermaster>/$<TARGET_FILE_NAME:rps-pluginscanner>"
     # Optional Rosetta fallback scanner
     COMMAND ${CMAKE_COMMAND} 
-        -DSRC="$<TARGET_FILE_DIR:rps-pluginscanner>/rps-pluginscanner_x86_64" 
-        -DDST="$<TARGET_FILE_DIR:vstscannermaster>/rps-pluginscanner_x86_64" 
+        "-DSRC=$<TARGET_FILE_DIR:rps-pluginscanner>/rps-pluginscanner_x86_64"
+        "-DDST=$<TARGET_FILE_DIR:vstscannermaster>/rps-pluginscanner_x86_64"
         -P "${CMAKE_SOURCE_DIR}/cmake/try_copy.cmake"
     DEPENDS rps-pluginscanner
     COMMENT "Ensuring rps-pluginscanner is present for vstscannermaster"

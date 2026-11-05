@@ -105,7 +105,11 @@ target_link_libraries(rps-pluginhost
 if(WIN32)
     target_link_libraries(rps-pluginhost PRIVATE ole32)
     # 8MB stack for JUCE-based plugins
-    target_link_options(rps-pluginhost PRIVATE /STACK:8388608)
+    if(MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+        target_link_options(rps-pluginhost PRIVATE "LINKER:/STACK:8388608")
+    else()
+        target_link_options(rps-pluginhost PRIVATE -Wl,--stack,8388608)
+    endif()
 elseif(APPLE)
     target_link_libraries(rps-pluginhost PRIVATE dl)
 else()

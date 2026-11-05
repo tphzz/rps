@@ -15,7 +15,6 @@ if(UNIX AND NOT APPLE)
 endif()
 
 if(APPLE)
-    enable_language(OBJCXX)
     list(APPEND SCANNER_SOURCES src/scanners/AuScanner.mm)
 endif()
 
@@ -32,7 +31,7 @@ if(RPS_ENABLE_VST2)
     target_compile_definitions(rps-pluginscanner PRIVATE RPS_VST2_ENABLED)
     # VST2 SDK headers contain non-UTF-8 bytes (copyright symbols) that
     # conflict with /utf-8. Suppress C4828 for the VST2 scanner source.
-    if(MSVC)
+    if(RPS_MSVC_FRONTEND)
         set_source_files_properties(src/scanners/Vst2Scanner.cpp
             PROPERTIES COMPILE_FLAGS "/wd4828")
     endif()
@@ -49,14 +48,17 @@ target_link_libraries(rps-pluginscanner
 )
 
 add_custom_target(rps-pluginscanner-deps ALL
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:rps-pluginscanner>
-        "${CMAKE_SOURCE_DIR}/examples/python/$<TARGET_FILE_NAME:rps-pluginscanner>"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        $<TARGET_FILE:rps-pluginscanner>
-        "${CMAKE_SOURCE_DIR}/examples/java/$<TARGET_FILE_NAME:rps-pluginscanner>"
+    COMMAND ${CMAKE_COMMAND}
+        "-DSRC=$<TARGET_FILE:rps-pluginscanner>"
+        "-DDST=${CMAKE_SOURCE_DIR}/examples/python/$<TARGET_FILE_NAME:rps-pluginscanner>"
+        -P "${CMAKE_SOURCE_DIR}/cmake/try_copy.cmake"
+    COMMAND ${CMAKE_COMMAND}
+        "-DSRC=$<TARGET_FILE:rps-pluginscanner>"
+        "-DDST=${CMAKE_SOURCE_DIR}/examples/java/$<TARGET_FILE_NAME:rps-pluginscanner>"
+        -P "${CMAKE_SOURCE_DIR}/cmake/try_copy.cmake"
     DEPENDS rps-pluginscanner
     COMMENT "Ensuring rps-pluginscanner is present in example directories"
+    VERBATIM
 )
 
 if(WIN32)

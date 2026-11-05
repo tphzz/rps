@@ -1,18 +1,16 @@
 cmake_minimum_required(VERSION 3.25)
 
-cmake_policy(SET CMP0167 NEW)
-
 project(rps-plugin-scanner
     VERSION 0.2.1
     DESCRIPTION "RPS"
-    LANGUAGES C CXX OBJCXX
+    LANGUAGES C CXX
 )
 
-# x64-windows* vcpkg triplets produce MSVC-ABI binaries. Using GNU-targeting
+# Windows vcpkg triplets produce MSVC-ABI binaries. Using GNU-targeting
 # clang++ (e.g. MSYS2 clang64) with those libraries causes linker failures
 # such as missing LIBCMTD/OLDNAMES import libs.
 if(WIN32
-   AND VCPKG_TARGET_TRIPLET MATCHES "^x64-windows"
+   AND VCPKG_TARGET_TRIPLET MATCHES "^[^-]+-windows($|-)"
    AND CMAKE_CXX_COMPILER_ID STREQUAL "Clang"
    AND NOT CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
     message(FATAL_ERROR
@@ -21,7 +19,7 @@ if(WIN32
         "  triplet:  ${VCPKG_TARGET_TRIPLET}\n\n"
         "The selected vcpkg triplet uses MSVC ABI libraries, but this clang++ "
         "targets GNU/MinGW. Use one of:\n"
-        "  1) clang-cl or cl.exe with -DVCPKG_TARGET_TRIPLET=x64-windows-static\n"
+        "  1) clang-cl or cl.exe in a matching Visual Studio developer environment\n"
         "  2) clang++ with a MinGW triplet (for example x64-mingw-static).")
 endif()
 
@@ -30,12 +28,29 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(APPLE)
+    enable_language(OBJCXX)
+    set(CMAKE_OBJCXX_STANDARD 23)
+    set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+    set(CMAKE_OBJCXX_EXTENSIONS OFF)
+endif()
+
+# A compiler targeting the MSVC ABI can still use a GNU-style driver.
+set(RPS_MSVC_FRONTEND OFF)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC"
+   OR CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+    set(RPS_MSVC_FRONTEND ON)
+endif()
+
+# Register tests from subdirectories without introducing a second test option.
+enable_testing()
+
 # MSVC global flags (applied to ALL targets, including third-party):
 #   /EHa   — async exception handling, allows __try/__except with C++ objects.
 #            Required because we wrap all plugin calls in SEH for crash safety.
 #   /Zc:__cplusplus — report correct __cplusplus value (MSVC defaults to 199711L).
 #            Needed by VST3 SDK's SMTG_CPP20 macro and std::filesystem::u8string.
-if(MSVC)
+if(RPS_MSVC_FRONTEND)
     # Force-replace /EHsc with /EHa in the cached CMAKE_CXX_FLAGS.
     # Must use CACHE FORCE because CMake caches this variable after compiler detection.
     string(REPLACE "/EHsc" "/EHa" _fixed_cxx_flags "${CMAKE_CXX_FLAGS}")
@@ -63,7 +78,7 @@ if(WIN32
     # Resolve LNK4098 by ignoring the runtime we're not using for each config.
     # Keep this only for cl.exe-style drivers; clang++ (MSVC target) does not
     # accept raw '/NODEFAULTLIB:...' in CMAKE_EXE_LINKER_FLAGS.
-    if(MSVC)
+    if(RPS_MSVC_FRONTEND)
         set(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} /NODEFAULTLIB:LIBCMTD")
         set(CMAKE_EXE_LINKER_FLAGS_DEBUG "${CMAKE_EXE_LINKER_FLAGS_DEBUG} /NODEFAULTLIB:LIBCMT")
     endif()
@@ -74,7 +89,7 @@ add_definitions(-DBOOST_ALL_NO_LIB)
 
 # Strict warnings — applied only to our own targets, not third-party code
 add_library(rps_warnings INTERFACE)
-if(MSVC)
+if(RPS_MSVC_FRONTEND)
     target_compile_options(rps_warnings INTERFACE /W4 /WX /permissive- /utf-8
         /wd4324           # structure padded due to alignas — intentional for cache-line atomics
         /wd4267           # size_t to int conversion — unavoidable in protobuf generated code
@@ -103,20 +118,27 @@ if(WIN32 AND NOT MSVC AND NOT CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
 endif()
 
 # Boost: managed entirely by vcpkg
-find_package(Boost REQUIRED COMPONENTS json program_options filesystem process interprocess uuid dll date_time crc)
+# Config mode is supported by CMake 3.25 and avoids the FindBoost/CMP0167 policy.
+# https://cmake.org/cmake/help/v3.25/command/find_package.html#config-mode
+find_package(Boost CONFIG REQUIRED COMPONENTS json program_options filesystem process interprocess uuid dll date_time crc)
 
 # Find SQLite3
 # Prefer the static library; fall back to shared via find_package
 find_library(SQLITE3_STATIC_LIBRARY NAMES libsqlite3.a sqlite3.a)
 if(SQLITE3_STATIC_LIBRARY)
     find_path(SQLITE3_INCLUDE_DIR NAMES sqlite3.h REQUIRED)
-    add_library(SQLite::SQLite3 UNKNOWN IMPORTED)
-    set_target_properties(SQLite::SQLite3 PROPERTIES
+    add_library(SQLite3::SQLite3 UNKNOWN IMPORTED)
+    set_target_properties(SQLite3::SQLite3 PROPERTIES
         IMPORTED_LOCATION "${SQLITE3_STATIC_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${SQLITE3_INCLUDE_DIR}"
     )
 else()
     find_package(SQLite3 REQUIRED)
+    # CMake 4.3 renamed the imported target; retain compatibility with 3.25.
+    # https://cmake.org/cmake/help/v4.3/module/FindSQLite3.html#imported-targets
+    if(NOT TARGET SQLite3::SQLite3)
+        add_library(SQLite3::SQLite3 ALIAS SQLite::SQLite3)
+    endif()
 endif()
 
 # Optional: VST2.4 plugin scanning (requires the proprietary VST2 SDK)
@@ -127,8 +149,8 @@ if(RPS_ENABLE_VST2)
     if(NOT EXISTS "${RPS_VST2_SDK_PATH}/pluginterfaces/vst2.x/aeffect.h")
         message(FATAL_ERROR
             "VST2.4 SDK not found at: ${RPS_VST2_SDK_PATH}/pluginterfaces/vst2.x/aeffect.h\n"
-            "Place the VST2.4 SDK in libs/rps-core/include/rps/core/vstsdk2.4/\n"
-            "or set -DRPS_VST2_SDK_PATH=/path/to/vstsdk2.4"
+            "Set -DRPS_VST2_SDK_PATH=/external/path/to/vstsdk2.4.\n"
+            "Keep the proprietary SDK outside the source checkout."
         )
     endif()
     message(STATUS "VST2.4 support ENABLED (SDK: ${RPS_VST2_SDK_PATH})")

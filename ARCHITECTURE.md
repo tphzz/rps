@@ -73,7 +73,7 @@ Every boundary where third-party plugin code runs is defended:
 |-----------|-----------|
 | **C++23** | Required for `std::format`, `std::expected`, `std::ranges`, `std::barrier`, `std::move_only_function`. C++ is the industry standard for audio programming. |
 | **Minimal dependencies** | Only STL, Boost, SQLite, gRPC/Protobuf, spdlog, SDL3, Dear ImGui. No JUCE, no nlohmann/json, no framework lock-in. |
-| **Static linking everywhere** | All binaries are fully self-contained. No missing DLL failures at runtime. Managed via vcpkg across all platforms. |
+| **Static third-party dependencies** | vcpkg static libraries and the Windows static CRT reduce deployment dependencies. Native OS libraries and frameworks remain required. |
 | **Phased delivery** | Each phase produces working, verifiable code with tests. No big-bang integrations. |
 
 ### 2.5 Two Domains, One Foundation
@@ -137,7 +137,7 @@ The two domains and their subsystems:
 | Domain | Subsystem | Purpose | Key Components |
 |--------|-----------|---------|----------------|
 | **A: Scanning** | Plugin Scanning | Discover and catalog plugins across all formats | `rps-engine`, `ProcessPool`, `rps-pluginscanner`, SQLite |
-| **B: Audio** | Single-Plugin Hosting | Load one plugin, show its GUI, process audio | `rps-gui`, `rps-pluginhost-{vst3,clap}`, `SharedAudioRing` |
+| **B: Audio** | Single-Plugin Hosting | Load one plugin, show its GUI, process audio | `rps-gui`, `rps-pluginhost`, `SharedAudioRing` |
 | **B: Audio** | Graph Audio Engine | Multi-plugin processing with arbitrary DAG routing | `rps-coordinator`, `GraphExecutor`, `rps-pluginhost` (graph mode) |
 
 ---
@@ -228,7 +228,7 @@ rps-server          rps-pluginscanner
 ### 5.2 Plugin Host Path: stdin/stdout Pipes
 
 ```
-rps-server              rps-pluginhost-vst3
+rps-server              rps-pluginhost
 ┌───────────────┐       ┌──────────────────┐
 │GuiSessionMgr │──pipe─►│ stdin (commands)  │
 │               │◄─pipe─│ stdout* (events)  │
@@ -342,12 +342,12 @@ SQLite with **WAL journal mode** and **explicit transactions**. Without explicit
 
 ### 7.1 Architecture
 
-Each plugin format has a dedicated host worker process:
+The unified host worker selects a plugin format at startup:
 
 | Process | Format | Key File |
 |---------|--------|----------|
-| `rps-pluginhost-vst3` | VST3 | `Vst3GuiHost.cpp` |
-| `rps-pluginhost-clap` | CLAP | `ClapGuiHost.cpp` |
+| `rps-pluginhost --format vst3` | VST3 | `Vst3GuiHost.cpp` |
+| `rps-pluginhost --format clap` | CLAP | `ClapGuiHost.cpp` |
 
 Both implement the shared `IPluginGuiHost` interface from `libs/rps-gui/`:
 
@@ -639,6 +639,15 @@ Graph mode will support opening/closing individual plugin GUIs within a running 
 | CLI parsing | Boost.Program_options | 1.90 |
 
 ## Appendix B: Platform-Specific Notes
+
+### Build and validation
+
+- CMake 3.25+ discovers Boost through its config package. Objective-C++ is enabled only on macOS; both C++ and Objective-C++ require C++23 without compiler extensions.
+- Windows x64 builds use MSVC with `x64-windows-static`, or clang-cl with the x64-only `x64-windows-static-clang` overlay. Windows ARM64 uses `arm64-windows-static` with a matching developer environment. Compiler-driver syntax and target ABI are checked separately.
+- macOS ARM64/Intel use `arm64-osx-release`/`x64-osx-release`; Linux x64/ARM64 use `x64-linux`/`arm64-linux`. Linux requires native X11 development libraries for plugin embedding, plus the SDL3 Wayland, IBus, and ALSA prerequisites described in the README.
+- The coordinator suite is built by default and registered with CTest. `RPS_BUILD_COORDINATOR_TESTS=OFF` omits its executable and registration; no external test framework is required.
+- Server builds refresh required scanner/host companions even without a server relink. Copies to example directories and optional Rosetta companion copies remain best-effort.
+- VST2 remains an opt-in scanner feature. Its proprietary SDK must stay outside the source checkout and is supplied through `RPS_VST2_SDK_PATH`.
 
 ### Windows
 - **SEH wrapping** for all plugin code boundaries (load, setup, process, teardown).

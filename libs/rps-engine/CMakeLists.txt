@@ -14,7 +14,7 @@ target_link_libraries(rps-engine
         rps-core
         rps-ipc
         Boost::filesystem
-        SQLite::SQLite3
+        SQLite3::SQLite3
     PRIVATE
         rps_warnings
         Boost::crc

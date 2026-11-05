@@ -49,7 +49,7 @@ add_custom_command(
 )
 
 # Suppress warnings on machine-generated code
-if(MSVC)
+if(RPS_MSVC_FRONTEND)
     set_source_files_properties(${GRPC_SRCS} PROPERTIES COMPILE_FLAGS "/W0")
 else()
     set_source_files_properties(${GRPC_SRCS} PROPERTIES COMPILE_FLAGS "-Wno-error -w")
@@ -79,17 +79,16 @@ target_link_libraries(rps-server
         rps_warnings
         ${RPS_GRPC_LIB}
         spdlog::spdlog
-        SQLite::SQLite3
+        SQLite3::SQLite3
         Boost::program_options
         Boost::filesystem
         Boost::dll
 )
 
-# Ensure the scanner and plugin host are built before we try to copy them
-add_dependencies(rps-server rps-pluginscanner rps-pluginhost)
-
-# POST_BUILD: copy on rebuild
-add_custom_command(TARGET rps-server POST_BUILD
+# Run for targeted server builds too: a worker can change without relinking the server.
+# TARGET_FILE_DIR does not add a server dependency (CMP0112 NEW), avoiding a cycle.
+add_custom_target(rps-server-worker-deps
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:rps-server>"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:rps-pluginscanner>
         "$<TARGET_FILE_DIR:rps-server>/$<TARGET_FILE_NAME:rps-pluginscanner>"
@@ -98,13 +97,20 @@ add_custom_command(TARGET rps-server POST_BUILD
         "$<TARGET_FILE_DIR:rps-server>/$<TARGET_FILE_NAME:rps-pluginhost>"
     # Optional Rosetta fallback binaries
     COMMAND ${CMAKE_COMMAND} 
-        -DSRC="$<TARGET_FILE_DIR:rps-pluginscanner>/rps-pluginscanner_x86_64" 
-        -DDST="$<TARGET_FILE_DIR:rps-server>/rps-pluginscanner_x86_64" 
+        "-DSRC=$<TARGET_FILE_DIR:rps-pluginscanner>/rps-pluginscanner_x86_64"
+        "-DDST=$<TARGET_FILE_DIR:rps-server>/rps-pluginscanner_x86_64"
         -P "${CMAKE_SOURCE_DIR}/cmake/try_copy.cmake"
     COMMAND ${CMAKE_COMMAND} 
-        -DSRC="$<TARGET_FILE_DIR:rps-pluginhost>/rps-pluginhost_x86_64" 
-        -DDST="$<TARGET_FILE_DIR:rps-server>/rps-pluginhost_x86_64" 
+        "-DSRC=$<TARGET_FILE_DIR:rps-pluginhost>/rps-pluginhost_x86_64"
+        "-DDST=$<TARGET_FILE_DIR:rps-server>/rps-pluginhost_x86_64"
         -P "${CMAKE_SOURCE_DIR}/cmake/try_copy.cmake"
+    DEPENDS rps-pluginscanner rps-pluginhost
+    COMMENT "Ensuring current worker binaries are present next to rps-server"
+    VERBATIM
+)
+add_dependencies(rps-server rps-server-worker-deps)
+
+add_custom_command(TARGET rps-server POST_BUILD
     COMMAND ${CMAKE_COMMAND}
         -DSRC=$<TARGET_FILE:rps-server>
         -DDST=${CMAKE_SOURCE_DIR}/examples/python/$<TARGET_FILE_NAME:rps-server>
@@ -113,7 +119,7 @@ add_custom_command(TARGET rps-server POST_BUILD
         -DSRC=$<TARGET_FILE:rps-server>
         -DDST=${CMAKE_SOURCE_DIR}/examples/java/$<TARGET_FILE_NAME:rps-server>
         -P ${CMAKE_SOURCE_DIR}/cmake/try_copy.cmake
-    COMMENT "Copying server and deps to output directories"
+    COMMENT "Copying server to example directories"
     COMMAND_EXPAND_LISTS
 )
 
