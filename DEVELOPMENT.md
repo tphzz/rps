@@ -477,3 +477,9 @@ Installing Windows packages is per-user. Installer validation uses a temporary
 installation, checks native payload selection, tests the optional PATH entry, and
 uninstalls while preserving pre-existing user PATH values. Package smoke checks do
 not replace real plugin GUI, audio-device, or notarization qualification.
+
+Linux distribution packaging supports Ubuntu 22.04 and 24.04 build environments
+with Clang/libc++ 18. The package's `build_os` field records its distribution
+baseline; dependency caches distinguish these OS versions. A successful build on
+Ubuntu 24.04 establishes that build baseline, rather than compatibility with older
+glibc releases.

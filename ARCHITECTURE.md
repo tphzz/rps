@@ -683,3 +683,7 @@ hardened-runtime signatures grant the library-validation exception specifically 
 plugin-loading workers, preserving the process boundary around third-party code.
 Windows installers select the native payload and install per-user; packaging does
 not change IPC protocols, graph execution, or real-time audio behavior.
+
+Linux package manifests include the build distribution/version as `build_os`.
+Bundling C++ runtimes preserves the package's dependency closure while native
+system-library compatibility follows the recorded build baseline.

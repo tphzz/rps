@@ -545,3 +545,8 @@ ref/commit, package version, configuration, VST2 inclusion, notarization state, 
 payload hashes. Package versions may follow a selected version tag or branch rather
 than the source's CMake project version. Published release assets include checksums
 and a release manifest. Proprietary SDK source and headers are excluded.
+
+Linux archive manifests also contain `build_os` with the build distribution and
+version, such as `{"id":"ubuntu","version_id":"24.04"}`. Use a system with libraries
+compatible with that baseline. Packages built on Ubuntu 24.04 target a different
+system-library baseline from packages built on Ubuntu 22.04.
