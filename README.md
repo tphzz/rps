@@ -137,14 +137,14 @@ cmake --build build_x86_64 --config Release
 **Prerequisites:**
 ```bash
 # Ubuntu/Debian:
-sudo apt install build-essential cmake ninja-build pkg-config curl zip unzip tar autoconf autoconf-archive automake libtool
+sudo apt install build-essential cmake ninja-build pkg-config curl zip unzip tar autoconf autoconf-archive automake libtool libltdl-dev
 # SDL3 default X11/Wayland/IBus features, ALSA audio, and native plugin embedding:
 sudo apt install libx11-dev libxft-dev libxext-dev libwayland-dev wayland-protocols libxkbcommon-dev libegl1-mesa-dev libibus-1.0-dev libasound2-dev
 # For Clang:
 sudo apt install clang
 
 # Fedora:
-sudo dnf install gcc-c++ cmake ninja-build pkgconf-pkg-config curl zip unzip tar autoconf autoconf-archive automake libtool
+sudo dnf install gcc-c++ cmake ninja-build pkgconf-pkg-config curl zip unzip tar autoconf autoconf-archive automake libtool libtool-ltdl-devel
 sudo dnf install libX11-devel libXft-devel libXext-devel wayland-devel wayland-protocols-devel libxkbcommon-devel mesa-libEGL-devel ibus-devel alsa-lib-devel
 # For Clang:
 sudo dnf install clang

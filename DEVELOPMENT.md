@@ -74,7 +74,7 @@ We adhere to a set of strict constraints to ensure maximum compatibility, adopti
 
 ### 2.1 Dependency Management
 
-RPS resolves Boost, gRPC, Protobuf, spdlog, SQLite, SDL3, and ImGui through **vcpkg** using static-library triplets. Operating-system libraries and frameworks remain external requirements; Linux GUI/audio prerequisites are listed in the README.
+RPS resolves Boost, gRPC, Protobuf, spdlog, SQLite, SDL3, and ImGui through **vcpkg** using static-library triplets. Operating-system libraries and frameworks remain external requirements; Linux GUI/audio prerequisites are listed in the README. Autotools-based dependency builds also require Autoconf Archive and libltdl development files (`libltdl-dev` on Ubuntu/Debian).
 
 - **Windows x64**: MSVC (`cl.exe`) uses `x64-windows-static`; clang-cl uses the `x64-windows-static-clang` overlay triplet. Both use Ninja and static CRT linkage. The custom Clang triplet is x64-only.
 - **Windows ARM64**: `arm64-windows-static` requires an ARM64 Visual Studio developer environment.
