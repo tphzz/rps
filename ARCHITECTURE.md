@@ -458,7 +458,7 @@ InputNode → PluginB ─┘
 
 **Thread pool design**:
 - Fixed-size pool created in `prepare()`, joined in destructor.
-- **Generation-counter pattern**: Workers wait on a condition variable. When a new wavefront is dispatched, the generation counter increments. Workers wake, grab tasks via atomic `fetch_add`, and process nodes. When all tasks complete, `doneCV` signals the main thread.
+- **Generation-counter pattern**: Workers wait on a condition variable. When a new wavefront is dispatched, the generation counter increments. Workers wake, grab tasks via atomic `fetch_add`, and process nodes. Each worker acknowledges the generation after leaving its task loop; the last worker signals `doneCV` while holding the pool mutex. The main thread waits for all workers before advancing.
 - **Main thread participates** in work-stealing — no idle core during dispatch.
 - Single-node wavefronts bypass the pool entirely and run on the calling thread.
 - Default thread count: `min(hardware_concurrency / 2, 8)`. Phase 6 refines this to P-core count.
@@ -542,10 +542,10 @@ RPS computes **wavefronts** — groups of nodes at the same topological depth �
 The thread pool uses a **generation-counter pattern** instead of `std::barrier`:
 
 1. Workers loop: wait on `m_startCV` for `m_generation > localGen`.
-2. Main thread increments generation, stores wavefront info, notifies all workers.
+2. Under `m_poolMutex`, the main thread resets the task index and finished-worker count, stores wavefront info, and increments the generation; it then notifies all workers.
 3. Workers and main thread both grab tasks via `m_nextTask.fetch_add()`.
-4. Last thread to complete signals `m_doneCV`.
-5. Main thread waits on `m_doneCV`, then advances to the next wavefront.
+4. Every worker increments `m_finishedWorkers` under `m_poolMutex` after leaving its task loop, including workers that claimed no task. The last worker signals `m_doneCV`.
+5. Main thread waits on `m_doneCV` until every worker has acknowledged the generation, then advances to the next wavefront. The count and wait predicate share a mutex, preventing missed wakeups. Waiting for workers to leave the loop also prevents reuse of wave state or block buffers while the preceding generation still accesses them.
 
 This pattern was chosen over `std::barrier` because:
 - It allows the main thread to participate in work-stealing (no idle core).

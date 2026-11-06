@@ -61,9 +61,13 @@ void GraphExecutor::workerLoop() {
             if (idx >= m_currentWaveSize) break;
 
             processNode((*m_currentWavefront)[idx]);
+        }
 
-            uint32_t done = m_completedTasks.fetch_add(1, std::memory_order_acq_rel) + 1;
-            if (done == m_currentWaveSize) {
+        {
+            // Finish every access to this wave before acknowledging its generation.
+            std::lock_guard lock(m_poolMutex);
+            ++m_finishedWorkers;
+            if (m_finishedWorkers == m_workers.size()) {
                 m_doneCV.notify_one();
             }
         }
@@ -193,11 +197,10 @@ void GraphExecutor::processBlock(
             } else {
                 uint32_t waveSize = static_cast<uint32_t>(wave.size());
 
-                m_nextTask.store(0, std::memory_order_relaxed);
-                m_completedTasks.store(0, std::memory_order_relaxed);
-
                 {
                     std::lock_guard lock(m_poolMutex);
+                    m_nextTask.store(0, std::memory_order_relaxed);
+                    m_finishedWorkers = 0;
                     m_currentWavefront = &wave;
                     m_currentWaveSize = waveSize;
                     ++m_generation;
@@ -208,16 +211,13 @@ void GraphExecutor::processBlock(
                     uint32_t idx = m_nextTask.fetch_add(1, std::memory_order_relaxed);
                     if (idx >= waveSize) break;
                     processNode(wave[idx]);
-                    uint32_t done = m_completedTasks.fetch_add(1, std::memory_order_acq_rel) + 1;
-                    if (done == waveSize) {
-                        m_doneCV.notify_one();
-                    }
                 }
 
                 {
                     std::unique_lock lock(m_poolMutex);
+                    // Workers must leave the task loop before any wave state or I/O is reused.
                     m_doneCV.wait(lock, [&] {
-                        return m_completedTasks.load(std::memory_order_acquire) >= waveSize;
+                        return m_finishedWorkers == m_workers.size();
                     });
                 }
             }

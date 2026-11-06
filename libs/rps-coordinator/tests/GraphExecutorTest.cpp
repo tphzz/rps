@@ -1,4 +1,6 @@
 #include "TestFramework.hpp"
+#include <atomic>
+#include <thread>
 #include <rps/coordinator/GraphExecutor.hpp>
 #include <rps/coordinator/Graph.hpp>
 #include <rps/coordinator/GraphNode.hpp>
@@ -532,6 +534,79 @@ TEST(GraphExecutor_ParallelPlugin_MultiBlock) {
         for (uint32_t ch = 0; ch < 2; ++ch) {
             for (uint32_t i = 0; i < kBlockSize; ++i) {
                 ASSERT_NEAR(outputs["out"].channel(ch)[i], 5.0f, 1e-5);
+            }
+        }
+    }
+}
+
+TEST(GraphExecutor_ParallelWaves_MultiBlock) {
+    // Consecutive waves with 8/8/4/4 nodes; eight workers also exercise idle workers.
+    for (uint32_t threadCount : {1u, 2u, 8u}) {
+        Graph g(Graph::Config{48000, kBlockSize});
+        MixerNodeConfig masterConfig;
+        masterConfig.outputLayout = stereoLayout();
+        masterConfig.numInputs = 4;
+        g.addNode(createMixerNode("master", masterConfig));
+        g.addNode(createOutputNode("out", {stereoLayout(), ""}));
+        g.addEdge("master", 0, "out", 0);
+
+        std::unordered_map<std::string, AudioBuffer> inputs;
+        for (uint32_t branch = 0; branch < 8; ++branch) {
+            auto inputId = "in" + std::to_string(branch);
+            auto pluginId = "p" + std::to_string(branch);
+            g.addNode(createInputNode(inputId, {stereoLayout(), ""}));
+            g.addNode(createPluginNode(pluginId, {"test.clap", "clap"}, stereoLayout()));
+            g.addEdge(inputId, 0, pluginId, 0);
+            inputs.emplace(inputId, makeTestBuffer(0.0f));
+        }
+        for (uint32_t pair = 0; pair < 4; ++pair) {
+            auto mixerId = "mix" + std::to_string(pair);
+            auto pluginId = "q" + std::to_string(pair);
+            MixerNodeConfig pairConfig;
+            pairConfig.outputLayout = stereoLayout();
+            pairConfig.numInputs = 2;
+            g.addNode(createMixerNode(mixerId, pairConfig));
+            g.addNode(createPluginNode(pluginId, {"test.clap", "clap"}, stereoLayout()));
+            g.addEdge("p" + std::to_string(pair * 2), 0, mixerId, 0);
+            g.addEdge("p" + std::to_string(pair * 2 + 1), 0, mixerId, 1);
+            g.addEdge(mixerId, 0, pluginId, 0);
+            g.addEdge(pluginId, 0, "master", pair);
+        }
+
+        std::atomic<uint32_t> pluginCalls{0};
+        GraphExecutor exec;
+        exec.setThreadCount(threadCount);
+        exec.prepare(g, [&](const std::string& nodeId, const AudioBuffer& input,
+                            AudioBuffer& output) {
+            if (nodeId == "p0" || nodeId == "q0") {
+                std::this_thread::yield();
+            }
+            for (uint32_t channel = 0; channel < input.numChannels(); ++channel) {
+                for (uint32_t sample = 0; sample < input.blockSize(); ++sample) {
+                    output.channel(channel)[sample] = input.channel(channel)[sample];
+                }
+            }
+            pluginCalls.fetch_add(1, std::memory_order_relaxed);
+            return true;
+        });
+        ASSERT_TRUE(exec.isParallel());
+        auto outputs = makeOutputMap();
+
+        for (uint32_t block = 0; block < 512; ++block) {
+            float value = static_cast<float>(block % 16 + 1);
+            for (auto& [_, buffer] : inputs) {
+                for (uint32_t channel = 0; channel < buffer.numChannels(); ++channel) {
+                    for (uint32_t sample = 0; sample < buffer.blockSize(); ++sample) {
+                        buffer.channel(channel)[sample] = value;
+                    }
+                }
+            }
+            exec.processBlock(inputs, outputs);
+            ASSERT_EQ(pluginCalls.load(std::memory_order_relaxed), (block + 1) * 12);
+            for (uint32_t channel = 0; channel < 2; ++channel) {
+                for (uint32_t sample = 0; sample < kBlockSize; ++sample) {
+                    ASSERT_NEAR(outputs.at("out").channel(channel)[sample], value * 8.0f, 1e-5);
+                }
             }
         }
     }

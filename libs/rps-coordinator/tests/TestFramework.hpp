@@ -34,6 +34,8 @@ inline int runAllTests() {
     int passed = 0;
     int failed = 0;
     for (const auto& test : testRegistry()) {
+        std::printf("  [RUN] %s\n", test.name.c_str());
+        std::fflush(stdout);
         try {
             test.func();
             ++passed;

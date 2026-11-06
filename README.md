@@ -186,6 +186,8 @@ ctest --test-dir build-vc -C Release --output-on-failure --no-tests=error
 ctest --test-dir build-clang -C Release --output-on-failure --no-tests=error
 ```
 
+Parallel processing waits for every worker to finish the current wave before reusing state or buffers for the next wave or block. Coordinator tests cover repeated blocks, consecutive parallel waves, and idle workers; the test runner prints each test name before execution to identify a timeout.
+
 Use your selected build directory on other platforms. Set `-DRPS_BUILD_COORDINATOR_TESTS=OFF` to omit the test executable and its registration. `CMAKE_EXPORT_COMPILE_COMMANDS=ON` provides a compilation database for checks such as `clang-tidy -p build-clang "--checks=clang-analyzer-*" apps/rps-server/src/main.cpp`. Select actual checks explicitly if your local clang-tidy configuration enables only compiler diagnostics.
 
 VST2 is disabled by default. To enable it locally, keep the proprietary SDK outside the source checkout and point an existing build at it:

@@ -131,7 +131,7 @@ private:
     const std::vector<std::string>* m_currentWavefront = nullptr;
     uint32_t m_currentWaveSize = 0;
     std::atomic<uint32_t> m_nextTask{0};
-    std::atomic<uint32_t> m_completedTasks{0};
+    uint32_t m_finishedWorkers = 0;     // protected by m_poolMutex
     uint64_t m_generation = 0;          // incremented each new wavefront
     bool m_stopWorkers = false;
 

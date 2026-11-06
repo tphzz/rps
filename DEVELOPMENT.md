@@ -91,6 +91,8 @@ SQLite consumers use `SQLite3::SQLite3`; configuration supplies an alias on CMak
 
 The existing `RPS_BUILD_COORDINATOR_TESTS` option defaults to `ON`. The coordinator suite is registered as `rps-coordinator-tests` with CTest and has a 120-second timeout. Use `ctest --test-dir <build-dir> -C Release --output-on-failure --no-tests=error`; disable the option to omit both the executable and registration. Export compile commands when configuring Ninja builds for clang-tidy checks.
 
+Parallel wave completion uses a worker count guarded by the same mutex as the completion wait. Every worker acknowledges each generation after leaving its task loop, including workers that claimed no task. This prevents missed notifications and reuse of state while workers still access the preceding wave. The regression suite exercises consecutive 8/8/4/4-node waves over changing input blocks with 1, 2, and 8 workers. The runner flushes a `[RUN]` line before each test so timeout logs identify the active test.
+
 ### 2.2 Optional: VST2.4 SDK
 
 VST2 scanning is gated behind a **compile-time CMake option** (`RPS_ENABLE_VST2`, default OFF) because the VST2.4 SDK is proprietary and cannot be redistributed.
