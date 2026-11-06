@@ -10,7 +10,9 @@
 // Suppress warnings from VST3 SDK headers
 #ifdef __clang__
 #pragma clang diagnostic push
+#if __has_warning("-Wunnecessary-virtual-specifier")
 #pragma clang diagnostic ignored "-Wunnecessary-virtual-specifier"
+#endif
 #endif
 
 #include "pluginterfaces/base/funknownimpl.h"
