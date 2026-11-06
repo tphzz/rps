@@ -47,9 +47,16 @@ target_include_directories(vst3-hosting-helpers PRIVATE
 # Minimal warning flags for third-party SDK code (no -WX/rps_warnings)
 target_compile_definitions(vst3-hosting-helpers PRIVATE _CRT_SECURE_NO_WARNINGS)
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    include(CheckCXXCompilerFlag)
+    # Probe the diagnostic itself before enabling its -Wno- suppression.
+    # https://cmake.org/cmake/help/v3.22/module/CheckCXXCompilerFlag.html
+    check_cxx_compiler_flag("-Wunnecessary-virtual-specifier" RPS_CLANG_HAS_UNNECESSARY_VIRTUAL_SPECIFIER_WARNING)
+    set(_rps_vst3_clang_warnings -Wno-pragma-pack)
+    if(RPS_CLANG_HAS_UNNECESSARY_VIRTUAL_SPECIFIER_WARNING)
+        list(APPEND _rps_vst3_clang_warnings -Wno-unnecessary-virtual-specifier)
+    endif()
     target_compile_options(vst3-hosting-helpers PRIVATE
-        -Wno-unnecessary-virtual-specifier
-        -Wno-pragma-pack
+        ${_rps_vst3_clang_warnings}
         -Wno-error=unused-parameter
         -Wno-deprecated-declarations
         -Wno-format
@@ -84,10 +91,7 @@ target_include_directories(rps-pluginhost PRIVATE
 
 # Suppress warnings from VST3 SDK headers
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    target_compile_options(rps-pluginhost PRIVATE
-        -Wno-unnecessary-virtual-specifier
-        -Wno-pragma-pack
-    )
+    target_compile_options(rps-pluginhost PRIVATE ${_rps_vst3_clang_warnings})
 endif()
 
 target_link_libraries(rps-pluginhost

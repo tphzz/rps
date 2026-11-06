@@ -51,7 +51,7 @@ RPS solves this with a **multi-process architecture** where all plugin code runs
 
 The CMake version range `3.22...3.25` accepts CMake 3.22 and enables policy behavior through 3.25 when available. macOS requires CMake 3.22.4 or newer for AppleClang C++23 support. A C++23-capable compiler and standard library are still required.
 
-Third-party dependencies (`boost`, `grpc`, `protobuf`, `spdlog`, `sqlite3`, `sdl3`, and `imgui`) are managed by `vcpkg` during configuration. Linux additionally needs the system development packages listed below.
+Third-party dependencies (`boost`, `grpc`, `protobuf`, `spdlog`, `sqlite3`, `sdl3`, and `imgui`) are managed by `vcpkg` during configuration. Linux additionally needs the system development packages listed below. Clang warning suppressions for VST3 headers are checked for compiler support during configuration, including when using Clang 18.
 
 ### Step 1: Clone the Repository
 

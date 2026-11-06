@@ -85,6 +85,8 @@ Because all dependencies are managed via `vcpkg.json` (Manifest Mode), the CMake
 
 Boost is found in CMake config mode, avoiding an unconditional dependency on the CMake 3.30 `CMP0167` policy while retaining the project's CMake 3.22 minimum. The `3.22...3.25` version range preserves policy behavior through CMake 3.25 when available. macOS requires at least 3.22.4, which added AppleClang C++23 flag support. MSVC-style warning and linker options are selected by compiler frontend rather than assuming that every compiler targeting Windows accepts the same command-line syntax.
 
+Clang warning suppressions for VST3 SDK code and headers use `CheckCXXCompilerFlag` to test the positive diagnostic option before enabling its `-Wno-` form. This keeps strict warnings compatible with Clang 18 and newer compilers.
+
 SQLite consumers use `SQLite3::SQLite3`; configuration supplies an alias on CMake versions older than 4.3. This keeps the 3.22 minimum while avoiding the deprecated target name on newer CMake releases.
 
 The existing `RPS_BUILD_COORDINATOR_TESTS` option defaults to `ON`. The coordinator suite is registered as `rps-coordinator-tests` with CTest and has a 120-second timeout. Use `ctest --test-dir <build-dir> -C Release --output-on-failure --no-tests=error`; disable the option to omit both the executable and registration. Export compile commands when configuring Ninja builds for clang-tidy checks.
